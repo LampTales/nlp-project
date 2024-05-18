@@ -359,6 +359,12 @@ if __name__ == "__main__":
     seed_everything(args.seed)
     #args.filepath = f'{args.option}-{args.epochs}-{args.lr}.pt'
 
+    if not os.path.exists('trained'):
+        os.makedirs('trained')
+    
+    if not os.path.exists('predictions'):
+        os.makedirs('predictions')
+
     print('Training Sentiment Classifier on SST...')
     config = SimpleNamespace(
         filepath='trained/sst-classifier.pt',
