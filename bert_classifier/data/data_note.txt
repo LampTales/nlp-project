@@ -1,0 +1,4 @@
+ids-cfimdb: sentiment analysis on movie reviews (for sentiment)
+ids-sst: sentiment analysis on movie reviews (for sentiment)
+quora: question pairs similarity (for paraphrase)
+sts: sentences pairs similarity (for similarity)
