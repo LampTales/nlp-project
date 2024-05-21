@@ -13,10 +13,10 @@ from tqdm import tqdm
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
 
-from evaluation import model_eval_sst, test_model_multitask
+from evaluation import model_eval_sst, test_model_multitask, model_eval_multitask
 
 
-TQDM_DISABLE=True
+TQDM_DISABLE=False
 
 # fix the random seed
 def seed_everything(seed=11711):
@@ -29,8 +29,17 @@ def seed_everything(seed=11711):
     torch.backends.cudnn.deterministic = True
 
 
+SENTIMENT_BATCH_MUL = 1
+PARAPHRASE_BATCCH_MUL = 10
+SIMILARITY_BATCH_MUL = 1
+
 BERT_HIDDEN_SIZE = 768
 N_SENTIMENT_CLASSES = 5
+
+PARAPHRASE_EMB = 768
+PARAPHRASE_THRESHOLD = 0.5
+
+SIMILARITY_EMB = 768
 
 
 class MultitaskBERT(nn.Module):
@@ -61,6 +70,26 @@ class MultitaskBERT(nn.Module):
             nn.Dropout(config.hidden_dropout_prob),
             nn.Linear(256, N_SENTIMENT_CLASSES)
         )
+
+        # Paraphrase detection
+        self.paraphrase_tower = nn.Sequential(
+            nn.Linear(BERT_HIDDEN_SIZE, 256),
+            nn.ReLU(),
+            nn.Dropout(config.hidden_dropout_prob),
+            nn.Linear(256, PARAPHRASE_EMB)
+        )
+
+        # Similarity detection
+        self.similarity_tower = nn.Sequential(
+            nn.Linear(BERT_HIDDEN_SIZE * 2, 256),
+            nn.ReLU(),
+            nn.Dropout(config.hidden_dropout_prob),
+            nn.Linear(256, SIMILARITY_EMB),
+            nn.ReLU(),
+            nn.Dropout(config.hidden_dropout_prob),
+            nn.Linear(SIMILARITY_EMB, 1)
+        )
+
 
 
     def forward(self, input_ids, attention_mask):
@@ -97,6 +126,14 @@ class MultitaskBERT(nn.Module):
         '''
         ### TODO
         # raise NotImplementedError
+        emb_1 = self.forward(input_ids_1, attention_mask_1)['last_hidden_state'].mean(dim=1)
+        emb_1 = self.paraphrase_tower(emb_1)
+        emb_2 = self.forward(input_ids_2, attention_mask_2)['last_hidden_state'].mean(dim=1)
+        emb_2 = self.paraphrase_tower(emb_2)
+        # calculate cosine similarity
+        sim = F.cosine_similarity(emb_1, emb_2, dim=-1)
+        return sim
+
         
 
 
@@ -107,7 +144,12 @@ class MultitaskBERT(nn.Module):
         Note that your output should be unnormalized (a logit).
         '''
         ### TODO
-        raise NotImplementedError
+        # raise NotImplementedError
+        emb_1 = self.forward(input_ids_1, attention_mask_1)['last_hidden_state'].mean(dim=1)
+        emb_2 = self.forward(input_ids_2, attention_mask_2)['last_hidden_state'].mean(dim=1)
+        emb = torch.cat((emb_1, emb_2), dim=-1)
+        sim = self.similarity_tower(emb)
+        return sim
 
 
 
@@ -138,10 +180,29 @@ def train_multitask(args):
     sst_train_data = SentenceClassificationDataset(sst_train_data, args)
     sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
 
-    sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size,
+    sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size*SENTIMENT_BATCH_MUL,
                                       collate_fn=sst_train_data.collate_fn)
-    sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
+    sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size*SENTIMENT_BATCH_MUL,
                                     collate_fn=sst_dev_data.collate_fn)
+    
+    # paraphrase data
+    para_train_data = SentencePairDataset(para_train_data, args)
+    para_dev_data = SentencePairDataset(para_dev_data, args)
+
+    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size*PARAPHRASE_BATCCH_MUL,
+                                       collate_fn=para_train_data.collate_fn)
+    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size*PARAPHRASE_BATCCH_MUL,
+                                        collate_fn=para_dev_data.collate_fn)
+    
+    # similarity data
+    simi_train_data = SentencePairDataset(sts_train_data, args)
+    simi_dev_data = SentencePairDataset(sts_dev_data, args)
+    
+    simi_train_dataloader = DataLoader(simi_train_data, shuffle=True, batch_size=args.batch_size*SIMILARITY_BATCH_MUL,
+                                        collate_fn=simi_train_data.collate_fn)
+    simi_dev_dataloader = DataLoader(simi_dev_data, shuffle=False, batch_size=args.batch_size*SIMILARITY_BATCH_MUL,
+                                        collate_fn=simi_dev_data.collate_fn)
+    
 
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
@@ -183,19 +244,102 @@ def train_multitask(args):
             num_batches += 1
 
         train_loss = train_loss / (num_batches)
+        sent_train_loss = train_loss
 
-        train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
-        dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
+        # train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
+        # sentiment_dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
 
-        if dev_acc > best_dev_acc:
-            best_dev_acc = dev_acc
-            save_model(model, optimizer, args, config, args.filepath)
+        # if sentiment_dev_acc > best_sentiment_dev_acc:
+        #     best_sentiment_dev_acc = sentiment_dev_acc
+            # TODO: fix the path
+            # save_model(model, optimizer, args, config, args.filepath)
 
-        print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+        # print(f"Task: Sentiment, Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+
+
+        # paraphrase
+        train_loss = 0
+        num_batch = 0
+        for batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            b_ids_1, b_mask_1, b_ids_2, b_mask_2, b_labels = (batch['token_ids_1'],
+                                                              batch['attention_mask_1'],
+                                                              batch['token_ids_2'],
+                                                              batch['attention_mask_2'],
+                                                              batch['labels'])
+
+            b_ids_1 = b_ids_1.to(device)
+            b_mask_1 = b_mask_1.to(device)
+            b_ids_2 = b_ids_2.to(device)
+            b_mask_2 = b_mask_2.to(device)
+            b_labels = b_labels.to(device)
+
+            b_labels = b_labels.float()
+
+            optimizer.zero_grad()
+            logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
+            # logits return cosine similarity
+            loss = F.mse_loss(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            num_batch += 1
+
+        train_loss = train_loss / (num_batches)
+        para_train_loss = train_loss
+        
+        
+        # similarity
+        train_loss = 0
+        num_batch = 0
+        for batch in tqdm(simi_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            b_ids_1, b_mask_1, b_ids_2, b_mask_2, b_labels = (batch['token_ids_1'],
+                                                              batch['attention_mask_1'],
+                                                              batch['token_ids_2'],
+                                                              batch['attention_mask_2'],
+                                                              batch['labels'])
+
+            b_ids_1 = b_ids_1.to(device)
+            b_mask_1 = b_mask_1.to(device)
+            b_ids_2 = b_ids_2.to(device)
+            b_mask_2 = b_mask_2.to(device)
+            b_labels = b_labels.to(device)
+
+            b_labels = b_labels.float()
+
+            optimizer.zero_grad()
+            logits = model.predict_similarity(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
+            loss = F.mse_loss(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            num_batch += 1
+
+        train_loss = train_loss / (num_batches)
+        simi_train_loss = train_loss
+        
+        # evaluate
+        para_train_acc, para_train_y_pred, _, sent_train_acc, sent_train_y_pred, _, simi_train_corr, simi_train_y_pred, *_ = model_eval_multitask(
+            sst_train_dataloader, para_train_dataloader, simi_train_dataloader, model, device)
+        para_dev_acc, para_dev_y_pred, _, sentiment_dev_acc, sent_dev_y_pred, _, simi_dev_corr, simi_dev_y_pred, *_ = model_eval_multitask(
+            sst_dev_dataloader, para_dev_dataloader, simi_dev_dataloader, model, device)
+        
+        print(f"Task: Sentiment, Epoch {epoch}: train loss :: {sent_train_loss :.3f}, train acc :: {sent_train_acc :.3f}, dev acc :: {sentiment_dev_acc :.3f}")
+        print(f"Task: Paraphrase, Epoch {epoch}: train loss :: {para_train_loss :.3f}, train acc :: {para_train_acc :.3f}, dev acc :: {para_dev_acc :.3f}")
+        print(f"Task: Similarity, Epoch {epoch}: train loss :: {simi_train_loss :.3f}, train corr :: {simi_train_corr :.3f}, dev corr :: {simi_dev_corr :.3f}")
+        
+        save_model(model, optimizer, args, config, args.filepath)
+
+
+        
 
 
 
 def test_model(args):
+
     with torch.no_grad():
         device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
         saved = torch.load(args.filepath)
@@ -250,7 +394,7 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
+    args.filepath = f'trained/{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility
     train_multitask(args)
     test_model(args)
