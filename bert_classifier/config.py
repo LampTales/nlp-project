@@ -220,3 +220,13 @@ class BertConfig(PretrainedConfig):
     self.gradient_checkpointing = gradient_checkpointing
     self.position_embedding_type = position_embedding_type
     self.use_cache = use_cache
+
+
+class LoraConfig():
+  def __init__(
+      self,
+      lora_rank = 5,
+      lora_dropout = 0.1,
+  ):
+    self.lora_rank = lora_rank
+    self.lora_dropout = lora_dropout
