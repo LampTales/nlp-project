@@ -12,6 +12,8 @@ class BertSelfAttention(nn.Module):
   def __init__(self, config):
     super().__init__()
 
+    self.lora = False
+
     self.num_attention_heads = config.num_attention_heads
     self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
     self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -24,10 +26,37 @@ class BertSelfAttention(nn.Module):
     # although it is a bit unusual, we empirically observe that it yields better performance
     self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-  def transform(self, x, linear_layer):
+
+  def lora_init(self, lora_config):
+    self.lora = True
+    self.lora_config = lora_config
+    
+    self.query_lora = nn.Sequential(
+      nn.Dropout(self.lora_config.lora_dropout),
+      nn.Linear(self.config.hidden_size, self.lora_config.lora_rank, bias=False),
+      nn.Linear(self.lora_config.lora_rank, self.config.all_head_size, bias=False)
+    )
+
+    self.key_lora = nn.Sequential(
+      nn.Dropout(self.lora_config.lora_dropout),
+      nn.Linear(self.config.hidden_size, self.lora_config.lora_rank, bias=False),
+      nn.Linear(self.lora_config.lora_rank, self.config.all_head_size, bias=False)
+    )
+
+    self.value_lora = nn.Sequential(
+      nn.Dropout(self.lora_config.lora_dropout),
+      nn.Linear(self.config.hidden_size, self.lora_config.lora_rank, bias=False),
+      nn.Linear(self.lora_config.lora_rank, self.config.all_head_size, bias=False)
+    )
+
+
+  def transform(self, x, linear_layer, lora_module=None):
     # the corresponding linear_layer of k, v, q are used to project the hidden_state (x)
     bs, seq_len = x.shape[:2]
     proj = linear_layer(x)
+    if self.lora:
+      # TODO: implement lora cal
+      pass
     # next, we need to produce multiple heads for the proj 
     # this is done by spliting the hidden state to self.num_attention_heads, each of size self.attention_head_size
     proj = proj.view(bs, seq_len, self.num_attention_heads, self.attention_head_size)
@@ -73,9 +102,14 @@ class BertSelfAttention(nn.Module):
     """
     # first, we have to generate the key, value, query for each token for multi-head attention w/ transform (more details inside the function)
     # of *_layers are of [bs, num_attention_heads, seq_len, attention_head_size]
-    key_layer = self.transform(hidden_states, self.key)
-    value_layer = self.transform(hidden_states, self.value)
-    query_layer = self.transform(hidden_states, self.query)
+    if self.lora:
+      key_layer = self.transform(hidden_states, self.key, self.key_lora)
+      value_layer = self.transform(hidden_states, self.value, self.value_lora)
+      query_layer = self.transform(hidden_states, self.query, self.query_lora)
+    else:
+      key_layer = self.transform(hidden_states, self.key)
+      value_layer = self.transform(hidden_states, self.value)
+      query_layer = self.transform(hidden_states, self.query)
     # calculate the multi-head attention 
     attn_value = self.attention(key_layer, query_layer, value_layer, attention_mask)
     return attn_value
@@ -85,6 +119,9 @@ class BertLayer(nn.Module):
   def __init__(self, config):
     super().__init__()
     # multi-head attention
+
+    self.lora = False
+
     self.self_attention = BertSelfAttention(config)
     # add-norm
     self.attention_dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -97,6 +134,32 @@ class BertLayer(nn.Module):
     self.out_dense = nn.Linear(config.intermediate_size, config.hidden_size)
     self.out_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
     self.out_dropout = nn.Dropout(config.hidden_dropout_prob)
+
+
+  def lora_init(self, lora_config):
+    self.lora = True
+    self.lora_config = lora_config
+
+    self.attention_dense_lora = nn.Sequential(
+      nn.Dropout(lora_config.lora_dropout),
+      nn.Linear(self.config.hidden_size, self.lora_config.lora_rank, bias=False),
+      nn.Linear(self.lora_config.lora_rank, self.config.hidden_size, bias=False)
+    )
+
+    self.interm_dense_lora = nn.Sequential(
+      nn.Dropout(lora_config.lora_dropout),
+      nn.Linear(self.config.hidden_size, self.lora_config.lora_rank, bias=False),
+      nn.Linear(self.lora_config.lora_rank, self.config.intermediate_size, bias=False)
+    )
+
+    self.out_dense_lora = nn.Sequential(
+      nn.Dropout(lora_config.lora_dropout),
+      nn.Linear(self.config.intermediate_size, self.lora_config.lora_rank, bias=False),
+      nn.Linear(self.lora_config.lora_rank, self.config.hidden_size, bias=False)
+    )
+
+    self.self_attention.lora_init(lora_config)
+
 
   def add_norm(self, input, output, dense_layer, dropout, ln_layer):
     """
@@ -146,6 +209,8 @@ class BertModel(BertPreTrainedModel):
     super().__init__(config)
     self.config = config
 
+    self.lora = False
+
     # embedding
     self.word_embedding = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
     self.pos_embedding = nn.Embedding(config.max_position_embeddings, config.hidden_size)
@@ -164,6 +229,21 @@ class BertModel(BertPreTrainedModel):
     self.pooler_af = nn.Tanh()
 
     self.init_weights()
+
+
+  def lora_init(self, lora_config):
+    self.lora = True
+    self.lora_config = lora_config
+
+    self.pooler_dense_lora = nn.Sequential(
+      nn.Dropout(lora_config.lora_dropout),
+      nn.Linear(self.config.hidden_size, self.lora_config.lora_rank, bias=False),
+      nn.Linear(self.lora_config.lora_rank, self.config.hidden_size, bias=False)
+    )
+
+    for i, layer_module in enumerate(self.bert_layers):
+      layer_module.lora_init(lora_config)
+
 
   def embed(self, input_ids):
     input_shape = input_ids.size()
