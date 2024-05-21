@@ -72,11 +72,20 @@ class MultitaskBERT(nn.Module):
         )
 
         # Paraphrase detection
+        # self.paraphrase_tower = nn.Sequential(
+        #     nn.Linear(BERT_HIDDEN_SIZE, 256),
+        #     nn.ReLU(),
+        #     nn.Dropout(config.hidden_dropout_prob),
+        #     nn.Linear(256, PARAPHRASE_EMB)
+        # )
         self.paraphrase_tower = nn.Sequential(
-            nn.Linear(BERT_HIDDEN_SIZE, 256),
+            nn.Linear(BERT_HIDDEN_SIZE * 2, 256),
             nn.ReLU(),
             nn.Dropout(config.hidden_dropout_prob),
-            nn.Linear(256, PARAPHRASE_EMB)
+            nn.Linear(256, SIMILARITY_EMB),
+            nn.ReLU(),
+            nn.Dropout(config.hidden_dropout_prob),
+            nn.Linear(SIMILARITY_EMB, 2)
         )
 
         # Similarity detection
@@ -126,12 +135,18 @@ class MultitaskBERT(nn.Module):
         '''
         ### TODO
         # raise NotImplementedError
+        # emb_1 = self.forward(input_ids_1, attention_mask_1)['last_hidden_state'].mean(dim=1)
+        # emb_1 = self.paraphrase_tower(emb_1)
+        # emb_2 = self.forward(input_ids_2, attention_mask_2)['last_hidden_state'].mean(dim=1)
+        # emb_2 = self.paraphrase_tower(emb_2)
+        # # calculate cosine similarity
+        # sim = F.cosine_similarity(emb_1, emb_2, dim=-1)
+        # return sim
+
         emb_1 = self.forward(input_ids_1, attention_mask_1)['last_hidden_state'].mean(dim=1)
-        emb_1 = self.paraphrase_tower(emb_1)
         emb_2 = self.forward(input_ids_2, attention_mask_2)['last_hidden_state'].mean(dim=1)
-        emb_2 = self.paraphrase_tower(emb_2)
-        # calculate cosine similarity
-        sim = F.cosine_similarity(emb_1, emb_2, dim=-1)
+        emb = torch.cat((emb_1, emb_2), dim=-1)
+        sim = self.paraphrase_tower(emb)
         return sim
 
         
@@ -277,8 +292,7 @@ def train_multitask(args):
 
             optimizer.zero_grad()
             logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
-            # logits return cosine similarity
-            loss = F.mse_loss(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+            loss = F.binary_cross_entropy_with_logits(logits.view(-1), b_labels.view(-1), reduction='sum') / args.batch_size
 
             loss.backward()
             optimizer.step()
@@ -371,7 +385,7 @@ def get_args():
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
-                        choices=('pretrain', 'finetune'), default="pretrain")
+                        choices=('pretrain', 'finetune', 'lora'), default="pretrain")
     parser.add_argument("--use_gpu", action='store_true')
 
     parser.add_argument("--sst_dev_out", type=str, default="predictions/sst-dev-output.csv")
