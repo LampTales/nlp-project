@@ -230,3 +230,11 @@ class LoraConfig():
   ):
     self.lora_rank = lora_rank
     self.lora_dropout = lora_dropout
+    
+
+class PromptConfig():
+  def __init__(
+    self,
+    single_prompt_length=2
+  ):
+    self.single_prompt_length = single_prompt_length

@@ -12,6 +12,8 @@ class BertSelfAttention(nn.Module):
   def __init__(self, config):
     super().__init__()
 
+    self.config = config
+    
     self.lora = False
 
     self.num_attention_heads = config.num_attention_heads
@@ -30,23 +32,24 @@ class BertSelfAttention(nn.Module):
   def lora_init(self, lora_config):
     self.lora = True
     self.lora_config = lora_config
+    self.lora_scaling = self.config.hidden_size / self.lora_config.lora_rank
     
     self.query_lora = nn.Sequential(
       nn.Dropout(self.lora_config.lora_dropout),
       nn.Linear(self.config.hidden_size, self.lora_config.lora_rank, bias=False),
-      nn.Linear(self.lora_config.lora_rank, self.config.all_head_size, bias=False)
+      nn.Linear(self.lora_config.lora_rank, self.all_head_size, bias=False)
     )
 
     self.key_lora = nn.Sequential(
       nn.Dropout(self.lora_config.lora_dropout),
       nn.Linear(self.config.hidden_size, self.lora_config.lora_rank, bias=False),
-      nn.Linear(self.lora_config.lora_rank, self.config.all_head_size, bias=False)
+      nn.Linear(self.lora_config.lora_rank, self.all_head_size, bias=False)
     )
 
     self.value_lora = nn.Sequential(
       nn.Dropout(self.lora_config.lora_dropout),
       nn.Linear(self.config.hidden_size, self.lora_config.lora_rank, bias=False),
-      nn.Linear(self.lora_config.lora_rank, self.config.all_head_size, bias=False)
+      nn.Linear(self.lora_config.lora_rank, self.all_head_size, bias=False)
     )
 
 
@@ -55,8 +58,8 @@ class BertSelfAttention(nn.Module):
     bs, seq_len = x.shape[:2]
     proj = linear_layer(x)
     if self.lora:
-      # TODO: implement lora cal
-      pass
+      lora_proj = lora_module(x)
+      proj = proj + lora_proj * self.lora_scaling
     # next, we need to produce multiple heads for the proj 
     # this is done by spliting the hidden state to self.num_attention_heads, each of size self.attention_head_size
     proj = proj.view(bs, seq_len, self.num_attention_heads, self.attention_head_size)
@@ -119,8 +122,9 @@ class BertLayer(nn.Module):
   def __init__(self, config):
     super().__init__()
     # multi-head attention
-
+    self.config = config
     self.lora = False
+    self.prompt = False
 
     self.self_attention = BertSelfAttention(config)
     # add-norm
@@ -139,6 +143,8 @@ class BertLayer(nn.Module):
   def lora_init(self, lora_config):
     self.lora = True
     self.lora_config = lora_config
+    self.lora_scaling_hidden = self.config.hidden_size / self.lora_config.lora_rank
+    self.lora_scaling_interm = self.config.intermediate_size / self.lora_config.lora_rank
 
     self.attention_dense_lora = nn.Sequential(
       nn.Dropout(lora_config.lora_dropout),
@@ -159,9 +165,20 @@ class BertLayer(nn.Module):
     )
 
     self.self_attention.lora_init(lora_config)
+    
+    
+  def prompt_init(self, prompt_config, acumulated_prompt_length=0):
+    self.prompt = True
+    self.prompt_config = prompt_config
+    self.single_prompt_length = prompt_config.single_prompt_length
+    self.acumulated_prompt_length = acumulated_prompt_length + self.single_prompt_length
+    
+    self.prompt_tensor = nn.Parameter(torch.randn(1, self.single_prompt_length, self.config.hidden_size))
+    # prompt tuning
+    self.prompt_tensor.requires_grad = True
 
 
-  def add_norm(self, input, output, dense_layer, dropout, ln_layer):
+  def add_norm(self, input, output, dense_layer, dropout, ln_layer, lora_module=None, lora_scaling=None):
     """
     this function is applied after the multi-head attention layer or the feed forward layer
     input: the input of the previous layer
@@ -173,7 +190,11 @@ class BertLayer(nn.Module):
     # Hint: Remember that BERT applies to the output of each sub-layer, before it is added to the sub-layer input and normalized 
     ### TODO
     # raise NotImplementedError
-    x = input + dropout(dense_layer(output))
+    if self.lora:
+      x = dense_layer(output) + lora_module(output) * lora_scaling
+      x = input + dropout(x)
+    else:
+      x = input + dropout(dense_layer(output))
     x = ln_layer(x)
     return x
 
@@ -190,10 +211,30 @@ class BertLayer(nn.Module):
     """
     ### TODO
     # raise NotImplementedError
+    if self.prompt:
+      # print(f'hidden_states.shape: {hidden_states.shape}')
+      # print(f'attention_mask.shape: {attention_mask.shape}')
+      # print(f'prompt_tensor.shape: {self.prompt_tensor.shape}')
+      # example of sizes:
+      # hidden_states.shape: torch.Size([8, 41, 768]) [batch_size, seq_len, hidden_size]
+      # attention_mask.shape: torch.Size([8, 1, 1, 41]) [batch_size, 1, 1, seq_len]
+      # prompt_tensor.shape: torch.Size([1, 2, 768]) [1, single_prompt_length, hidden_size]
+      hidden_states = torch.cat([self.prompt_tensor.repeat(hidden_states.size(0), 1, 1), hidden_states], dim=1)
+      attention_mask = torch.cat([torch.ones(attention_mask.size(0), 1, 1, self.acumulated_prompt_length, device=attention_mask.device), attention_mask], dim=-1)
+      # print(f'attention_mask.shape: {attention_mask.shape}')
     x = self.self_attention(hidden_states, attention_mask)
-    x = self.add_norm(hidden_states, x, self.attention_dense, self.attention_dropout, self.attention_layer_norm)
-    x_interm = self.interm_af(self.interm_dense(x))
-    x = self.add_norm(x, x_interm, self.out_dense, self.out_dropout, self.out_layer_norm)
+      
+    # just merge them
+    if self.lora:
+      x = self.add_norm(hidden_states, x, self.attention_dense, self.attention_dropout, self.attention_layer_norm, self.attention_dense_lora, self.lora_scaling_hidden)
+      x_interm = self.interm_dense(x) + self.interm_dense_lora(x) * self.lora_scaling_hidden
+      x_interm = self.interm_af(x_interm)
+      x = self.add_norm(x, x_interm, self.out_dense, self.out_dropout, self.out_layer_norm, self.out_dense_lora, self.lora_scaling_interm)
+    else:
+      x = self.add_norm(hidden_states, x, self.attention_dense, self.attention_dropout, self.attention_layer_norm)
+      x_interm = self.interm_af(self.interm_dense(x))
+      x = self.add_norm(x, x_interm, self.out_dense, self.out_dropout, self.out_layer_norm)
+      
     return x
 
 
@@ -210,6 +251,7 @@ class BertModel(BertPreTrainedModel):
     self.config = config
 
     self.lora = False
+    self.prompt = False
 
     # embedding
     self.word_embedding = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -234,6 +276,7 @@ class BertModel(BertPreTrainedModel):
   def lora_init(self, lora_config):
     self.lora = True
     self.lora_config = lora_config
+    self.lora_scaling = self.config.hidden_size / self.lora_config.lora_rank
 
     self.pooler_dense_lora = nn.Sequential(
       nn.Dropout(lora_config.lora_dropout),
@@ -243,6 +286,17 @@ class BertModel(BertPreTrainedModel):
 
     for i, layer_module in enumerate(self.bert_layers):
       layer_module.lora_init(lora_config)
+      
+      
+  def prompt_init(self, prompt_config):
+    self.prompt = True
+    self.prompt_config = prompt_config
+    self.single_prompt_length = prompt_config.single_prompt_length
+    self.total_prompt_length = 0
+    
+    for i, layer_module in enumerate(self.bert_layers):
+      layer_module.prompt_init(prompt_config, self.total_prompt_length)
+      self.total_prompt_length += self.single_prompt_length
 
 
   def embed(self, input_ids):
@@ -308,8 +362,15 @@ class BertModel(BertPreTrainedModel):
     sequence_output = self.encode(embedding_output, attention_mask=attention_mask)
 
     # get cls token hidden state
-    first_tk = sequence_output[:, 0]
-    first_tk = self.pooler_dense(first_tk)
+    if self.prompt:
+      first_tk = sequence_output[:, self.total_prompt_length]
+    else:
+      first_tk = sequence_output[:, 0]
+      
+    if self.lora:
+      first_tk = self.pooler_dense(first_tk) + self.pooler_dense_lora(first_tk) * self.lora_scaling
+    else:
+      first_tk = self.pooler_dense(first_tk)
     first_tk = self.pooler_af(first_tk)
 
     return {'last_hidden_state': sequence_output, 'pooler_output': first_tk}

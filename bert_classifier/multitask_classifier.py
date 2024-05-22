@@ -15,6 +15,8 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 
 from evaluation import model_eval_sst, test_model_multitask, model_eval_multitask
 
+from config import LoraConfig, PromptConfig
+
 
 TQDM_DISABLE=False
 
@@ -30,7 +32,7 @@ def seed_everything(seed=11711):
 
 
 SENTIMENT_BATCH_MUL = 1
-PARAPHRASE_BATCCH_MUL = 10
+PARAPHRASE_BATCCH_MUL = 20
 SIMILARITY_BATCH_MUL = 1
 
 BERT_HIDDEN_SIZE = 768
@@ -54,11 +56,25 @@ class MultitaskBERT(nn.Module):
         # You will want to add layers here to perform the downstream tasks.
         # Pretrain mode does not require updating bert paramters.
         self.bert = BertModel.from_pretrained('bert-base-uncased')
-        for param in self.bert.parameters():
-            if config.option == 'pretrain':
-                param.requires_grad = False
-            elif config.option == 'finetune':
-                param.requires_grad = True
+        
+        if config.option == 'pretrain':
+            self.frozen_bert()
+        elif config.option == 'finetune':
+            self.unfrozen_bert()
+        elif config.option == 'lora':
+            self.frozen_bert()
+            self.lora_config = LoraConfig(
+                lora_rank=8,
+                lora_dropout=0.1
+            )
+            self.bert.lora_init(lora_config=self.lora_config)
+        elif config.option == 'prompt':
+            self.frozen_bert()
+            self.prompt_config = PromptConfig(
+                single_prompt_length=2
+            )
+            self.bert.prompt_init(prompt_config=self.prompt_config)
+            
         ### TODO
         # raise NotImplementedError
         
@@ -78,7 +94,7 @@ class MultitaskBERT(nn.Module):
         #     nn.Linear(256, PARAPHRASE_EMB)
         # )
         self.paraphrase_tower = nn.Sequential(
-            nn.Linear(BERT_HIDDEN_SIZE, 256),
+            nn.Linear(BERT_HIDDEN_SIZE * 2, 256),
             nn.ReLU(),
             nn.Dropout(config.hidden_dropout_prob),
             nn.Linear(256, PARAPHRASE_EMB),
@@ -97,7 +113,16 @@ class MultitaskBERT(nn.Module):
             nn.Dropout(config.hidden_dropout_prob),
             nn.Linear(SIMILARITY_EMB, 1)
         )
-
+        
+    
+    def frozen_bert(self):
+        for param in self.bert.parameters():
+            param.requires_grad = False
+            
+            
+    def unfrozen_bert(self):
+        for param in self.bert.parameters():
+            param.requires_grad = True
 
 
     def forward(self, input_ids, attention_mask):
@@ -142,7 +167,11 @@ class MultitaskBERT(nn.Module):
         # sim = F.cosine_similarity(emb_1, emb_2, dim=-1)
         # return sim
 
-        pass
+        emb_1 = self.forward(input_ids_1, attention_mask_1)['last_hidden_state'].mean(dim=1)
+        emb_2 = self.forward(input_ids_2, attention_mask_2)['last_hidden_state'].mean(dim=1)
+        emb = torch.cat((emb_1, emb_2), dim=-1)
+        x = self.paraphrase_tower(emb)
+        return x
 
         
 
@@ -234,161 +263,89 @@ def train_multitask(args):
     for epoch in range(args.epochs):
         model.train()
         train_loss = 0
-    #     num_batches = 0
-    #     for batch in tqdm(sst_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
-    #         b_ids, b_mask, b_labels = (batch['token_ids'],
-    #                                    batch['attention_mask'], batch['labels'])
-
-    #         b_ids = b_ids.to(device)
-    #         b_mask = b_mask.to(device)
-    #         b_labels = b_labels.to(device)
-
-    #         optimizer.zero_grad()
-    #         logits = model.predict_sentiment(b_ids, b_mask)
-    #         loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
-
-    #         loss.backward()
-    #         optimizer.step()
-
-    #         train_loss += loss.item()
-    #         num_batches += 1
-
-    #     train_loss = train_loss / (num_batches)
-    #     sent_train_loss = train_loss
-
-
-    #     # paraphrase
-    #     train_loss = 0
-    #     num_batch = 0
-    #     for batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
-    #         b_ids_1, b_mask_1, b_ids_2, b_mask_2, b_labels = (batch['token_ids_1'],
-    #                                                           batch['attention_mask_1'],
-    #                                                           batch['token_ids_2'],
-    #                                                           batch['attention_mask_2'],
-    #                                                           batch['labels'])
-
-    #         b_ids_1 = b_ids_1.to(device)
-    #         b_mask_1 = b_mask_1.to(device)
-    #         b_ids_2 = b_ids_2.to(device)
-    #         b_mask_2 = b_mask_2.to(device)
-    #         b_labels = b_labels.to(device)
-
-    #         optimizer.zero_grad()
-    #         logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
-    #         loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
-
-    #         loss.backward()
-    #         optimizer.step()
-
-    #         train_loss += loss.item()
-    #         num_batch += 1
-
-    #     train_loss = train_loss / (num_batches)
-    #     para_train_loss = train_loss
-        
-        
-    #     # similarity
-    #     train_loss = 0
-    #     num_batch = 0
-    #     for batch in tqdm(simi_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
-    #         b_ids_1, b_mask_1, b_ids_2, b_mask_2, b_labels = (batch['token_ids_1'],
-    #                                                           batch['attention_mask_1'],
-    #                                                           batch['token_ids_2'],
-    #                                                           batch['attention_mask_2'],
-    #                                                           batch['labels'])
-
-    #         b_ids_1 = b_ids_1.to(device)
-    #         b_mask_1 = b_mask_1.to(device)
-    #         b_ids_2 = b_ids_2.to(device)
-    #         b_mask_2 = b_mask_2.to(device)
-    #         b_labels = b_labels.to(device)
-
-    #         b_labels = b_labels.float().view(-1).unsqueeze(-1)
-
-    #         optimizer.zero_grad()
-    #         logits = model.predict_similarity(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
-    #         loss = F.mse_loss(logits, b_labels, reduction='sum') / args.batch_size
-    #         loss.backward()
-    #         optimizer.step()
-
-    #         train_loss += loss.item()
-    #         num_batch += 1
-
-    #     train_loss = train_loss / (num_batches)
-    #     simi_train_loss = train_loss
-
+        sent_train_loss = 0
+        para_train_loss = 0
+        simi_train_loss = 0
 
         # train each task with one batch each time
-        # terminal = min(len(sst_train_dataloader), len(para_train_dataloader), len(simi_train_dataloader))
-        # num_batch = 0
-        # for sent_batch, para_batch, simi_batch in zip(tqdm(sst_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE),
-        #                                               tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE),
-        #                                               tqdm(simi_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE)):
-        #     # sentiment
-        #     b_ids, b_mask, b_labels = (sent_batch['token_ids'],
-        #                                sent_batch['attention_mask'], sent_batch['labels'])
+        sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size*SENTIMENT_BATCH_MUL,
+                                            collate_fn=sst_train_data.collate_fn)
+        para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size*PARAPHRASE_BATCCH_MUL,
+                                            collate_fn=para_train_data.collate_fn)
+        simi_train_dataloader = DataLoader(simi_train_data, shuffle=True, batch_size=args.batch_size*SIMILARITY_BATCH_MUL,
+                                           collate_fn=simi_train_data.collate_fn)
+        
+        num_batches = 0
+        zip_iter = zip(sst_train_dataloader, para_train_dataloader, simi_train_dataloader)
+        total_len = min(len(sst_train_dataloader), len(para_train_dataloader), len(simi_train_dataloader))
+        
+        for sent_batch, para_batch, simi_batch in tqdm(zip_iter, desc=f'train-{epoch}', disable=TQDM_DISABLE, total=total_len):
+            
+            optimizer.zero_grad()
+            
+            # sentiment
+            b_ids, b_mask, b_labels = (sent_batch['token_ids'],
+                                       sent_batch['attention_mask'], sent_batch['labels'])
 
-        #     b_ids = b_ids.to(device)
-        #     b_mask = b_mask.to(device)
-        #     b_labels = b_labels.to(device)
+            b_ids = b_ids.to(device)
+            b_mask = b_mask.to(device)
+            b_labels = b_labels.to(device)
 
-        #     optimizer.zero_grad()
-        #     logits = model.predict_sentiment(b_ids, b_mask)
-        #     loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
-
-        #     loss.backward()
-        #     optimizer.step()
-
-        #     train_loss += loss.item()
-
-        #     # paraphrase
-        #     b_ids_1, b_mask_1, b_ids_2, b_mask_2, b_labels = (para_batch['token_ids_1'],
-        #                                                       para_batch['attention_mask_1'],
-        #                                                       para_batch['token_ids_2'],
-        #                                                       para_batch['attention_mask_2'],
-        #                                                       para_batch['labels'])
-
-        #     b_ids_1 = b_ids_1.to(device)
-        #     b_mask_1 = b_mask_1.to(device)
-        #     b_ids_2 = b_ids_2.to(device)
-        #     b_mask_2 = b_mask_2.to(device)
-        #     b_labels = b_labels.to(device)
-
-        #     optimizer.zero_grad()
-        #     logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
-        #     loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
-
-        #     loss.backward()
-        #     optimizer.step()
-
-        #     train_loss += loss.item()
-
-        #     # similarity
-        #     b_ids_1, b_mask_1, b_ids_2, b_mask_2, b_labels = (simi_batch['token_ids_1'],
-        #                                                       simi_batch['attention_mask_1'],
-        #                                                       simi_batch['token_ids_2'],
-        #                                                       simi_batch['attention_mask_2'],
-        #                                                       simi_batch['labels'])
-
-        #     b_ids_1 = b_ids_1.to(device)
-        #     b_mask_1 = b_mask_1.to(device)
-        #     b_ids_2 = b_ids_2.to(device)
-        #     b_mask_2 = b_mask_2.to(device)
-        #     b_labels = b_labels.to(device)
-
-        #     logits = model.predict_similarity(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
-        #     loss = F.mse_loss(logits, b_labels.view(-1), reduction='sum') / args.batch_size
-        #     loss.backward()
-        #     optimizer.step()
-
-        #     train_loss += loss.item()
+            logits = model.predict_sentiment(b_ids, b_mask)
+            sent_loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / (args.batch_size*SENTIMENT_BATCH_MUL)
 
 
-        #     num_batch += 1
-        #     if num_batch > terminal:
-        #         break
+            # paraphrase
+            b_ids_1, b_mask_1, b_ids_2, b_mask_2, b_labels = (para_batch['token_ids_1'],
+                                                              para_batch['attention_mask_1'],
+                                                              para_batch['token_ids_2'],
+                                                              para_batch['attention_mask_2'],
+                                                              para_batch['labels'])
 
-        # train_loss = train_loss / (num_batches)
+            b_ids_1 = b_ids_1.to(device)
+            b_mask_1 = b_mask_1.to(device)
+            b_ids_2 = b_ids_2.to(device)
+            b_mask_2 = b_mask_2.to(device)
+            b_labels = b_labels.to(device)
+            
+            logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
+            para_loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / (args.batch_size*PARAPHRASE_BATCCH_MUL)
+            
+
+            # similarity
+            b_ids_1, b_mask_1, b_ids_2, b_mask_2, b_labels = (simi_batch['token_ids_1'],
+                                                              simi_batch['attention_mask_1'],
+                                                              simi_batch['token_ids_2'],
+                                                              simi_batch['attention_mask_2'],
+                                                              simi_batch['labels'])
+
+            b_ids_1 = b_ids_1.to(device)
+            b_mask_1 = b_mask_1.to(device)
+            b_ids_2 = b_ids_2.to(device)
+            b_mask_2 = b_mask_2.to(device)
+            b_labels = b_labels.to(device)
+            
+            b_labels = b_labels.float().view(-1).unsqueeze(-1)
+
+            logits = model.predict_similarity(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
+            simi_loss = F.mse_loss(logits, b_labels, reduction='sum') / (args.batch_size*SIMILARITY_BATCH_MUL)
+            
+            
+            total_loss = sent_loss + para_loss + simi_loss
+            total_loss.backward()
+            optimizer.step()
+            
+            train_loss += total_loss.item()
+            sent_train_loss += sent_loss.item()
+            para_train_loss += para_loss.item()
+            simi_train_loss += simi_loss.item()
+            num_batches += 1
+            
+            
+        train_loss = train_loss / (num_batches)
+        sent_train_loss = sent_train_loss / num_batches
+        para_train_loss = para_train_loss / num_batches
+        simi_train_loss = simi_train_loss / num_batches
 
 
         
@@ -403,19 +360,6 @@ def train_multitask(args):
         print(f"Task: Similarity, Epoch {epoch}: train loss :: {simi_train_loss :.3f}, train corr :: {simi_train_corr :.3f}, dev corr :: {simi_dev_corr :.3f}")
         
         save_model(model, optimizer, args, config, args.filepath)
-        
-        
-        # train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
-        # sentiment_dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
-
-        # if sentiment_dev_acc > best_sentiment_dev_acc:
-        #     best_sentiment_dev_acc = sentiment_dev_acc
-            # TODO: fix the path
-            # save_model(model, optimizer, args, config, args.filepath)
-
-        # print(f"Task: Sentiment, Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
-
-
         
 
 
@@ -453,7 +397,7 @@ def get_args():
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
-                        choices=('pretrain', 'finetune', 'lora'), default="pretrain")
+                        choices=('pretrain', 'finetune', 'lora', 'prompt'), default="pretrain")
     parser.add_argument("--use_gpu", action='store_true')
 
     parser.add_argument("--sst_dev_out", type=str, default="predictions/sst-dev-output.csv")
