@@ -31,6 +31,9 @@ class BertSelfAttention(nn.Module):
 
   def lora_init(self, lora_config):
     self.lora = True
+    self.k_lora = lora_config.k_lora
+    self.q_lora = lora_config.q_lora
+    self.v_lora = lora_config.v_lora
     self.lora_config = lora_config
     self.lora_scaling = self.config.hidden_size / self.lora_config.lora_rank
     
@@ -57,7 +60,7 @@ class BertSelfAttention(nn.Module):
     # the corresponding linear_layer of k, v, q are used to project the hidden_state (x)
     bs, seq_len = x.shape[:2]
     proj = linear_layer(x)
-    if self.lora:
+    if lora_module is not None:
       lora_proj = lora_module(x)
       proj = proj + lora_proj * self.lora_scaling
     # next, we need to produce multiple heads for the proj 
@@ -106,9 +109,18 @@ class BertSelfAttention(nn.Module):
     # first, we have to generate the key, value, query for each token for multi-head attention w/ transform (more details inside the function)
     # of *_layers are of [bs, num_attention_heads, seq_len, attention_head_size]
     if self.lora:
-      key_layer = self.transform(hidden_states, self.key, self.key_lora)
-      value_layer = self.transform(hidden_states, self.value, self.value_lora)
-      query_layer = self.transform(hidden_states, self.query, self.query_lora)
+      if self.k_lora:
+        key_layer = self.transform(hidden_states, self.key, self.key_lora)
+      else:
+        key_layer = self.transform(hidden_states, self.key)
+      if self.v_lora:
+        value_layer = self.transform(hidden_states, self.value, self.value_lora)
+      else:
+        value_layer = self.transform(hidden_states, self.value)
+      if self.q_lora:
+        query_layer = self.transform(hidden_states, self.query, self.query_lora)
+      else:
+        query_layer = self.transform(hidden_states, self.query)
     else:
       key_layer = self.transform(hidden_states, self.key)
       value_layer = self.transform(hidden_states, self.value)
@@ -141,7 +153,7 @@ class BertLayer(nn.Module):
 
 
   def lora_init(self, lora_config):
-    self.lora = True
+    self.lora = lora_config.interm_lora
     self.lora_config = lora_config
     self.lora_scaling_hidden = self.config.hidden_size / self.lora_config.lora_rank
     self.lora_scaling_interm = self.config.intermediate_size / self.lora_config.lora_rank
@@ -274,7 +286,7 @@ class BertModel(BertPreTrainedModel):
 
 
   def lora_init(self, lora_config):
-    self.lora = True
+    self.lora = lora_config.pooler_lora
     self.lora_config = lora_config
     self.lora_scaling = self.config.hidden_size / self.lora_config.lora_rank
 
