@@ -32,7 +32,7 @@ def seed_everything(seed=11711):
 
 
 SENTIMENT_BATCH_MUL = 1
-PARAPHRASE_BATCCH_MUL = 20
+PARAPHRASE_BATCCH_MUL = 4
 SIMILARITY_BATCH_MUL = 1
 
 BERT_HIDDEN_SIZE = 768
@@ -348,7 +348,6 @@ def train_multitask(args):
         simi_train_loss = simi_train_loss / num_batches
 
 
-        
         # evaluate
         para_train_acc, para_train_y_pred, _, sent_train_acc, sent_train_y_pred, _, simi_train_corr, simi_train_y_pred, *_ = model_eval_multitask(
             sst_train_dataloader, para_train_dataloader, simi_train_dataloader, model, device)
@@ -360,6 +359,11 @@ def train_multitask(args):
         print(f"Task: Similarity, Epoch {epoch}: train loss :: {simi_train_loss :.3f}, train corr :: {simi_train_corr :.3f}, dev corr :: {simi_dev_corr :.3f}")
         
         save_model(model, optimizer, args, config, args.filepath)
+
+        if epoch == 0:
+            nvi_out = os.popen('nvidia-smi')
+            print(nvi_out.read())
+            nvi_out.close()
         
 
 
