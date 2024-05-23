@@ -227,6 +227,11 @@ class LoraConfig():
       self,
       lora_rank = 5,
       lora_dropout = 0.1,
+      k_lora = True,
+      q_lora = True,
+      v_lora = True,
+      interm_lora = True,
+      pooler_lora = True,
   ):
     self.lora_rank = lora_rank
     self.lora_dropout = lora_dropout
