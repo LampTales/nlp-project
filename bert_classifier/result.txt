@@ -2,3 +2,20 @@ dev sentiment acc :: 0.317
 dev paraphrase acc :: 0.716                                                                                                                                                                                                                                                  
 dev sts corr :: 0.313  
 
+modify batch_size
+Task: Sentiment, Epoch 9: train loss :: 1.531, train acc :: 0.335, dev acc :: 0.324                                                                                                                                                                                          
+Task: Paraphrase, Epoch 9: train loss :: 0.525, train acc :: 0.747, dev acc :: 0.745                                                                                                                                                                                         
+Task: Similarity, Epoch 9: train loss :: 1.962, train corr :: 0.386, dev corr :: 0.307
+dev sentiment acc :: 0.324
+dev paraphrase acc :: 0.736
+dev sts corr :: 0.313  
+
+finetune with small batch
+Task: Sentiment, Epoch 9: train loss :: 0.310, train acc :: 0.944, dev acc :: 0.499                                                                                                              
+Task: Paraphrase, Epoch 9: train loss :: 0.455, train acc :: 0.801, dev acc :: 0.775                                                                                                             
+Task: Similarity, Epoch 9: train loss :: 0.212, train corr :: 0.973, dev corr :: 0.357  
+dev sentiment acc :: 0.499
+dev paraphrase acc :: 0.775
+dev sts corr :: 0.351
+
+finetune with small batch on AILab
