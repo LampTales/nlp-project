@@ -426,5 +426,6 @@ if __name__ == "__main__":
     args = get_args()
     args.filepath = f'trained/{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility
+    print(f'{args.option} :: batch_size: {args.batch_size}, para_mul: {PARAPHRASE_BATCCH_MUL}')
     train_multitask(args)
     test_model(args)

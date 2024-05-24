@@ -235,6 +235,19 @@ class LoraConfig():
   ):
     self.lora_rank = lora_rank
     self.lora_dropout = lora_dropout
+
+    self.k_lora = k_lora
+    self.q_lora = q_lora
+    self.v_lora = v_lora
+    self.interm_lora = interm_lora
+    self.pooler_lora = pooler_lora
+    
+    self.print_self()
+    
+    
+  def print_self(self):
+    for key, value in self.__dict__.items():
+      print(key, ":", value)
     
 
 class PromptConfig():
@@ -243,3 +256,9 @@ class PromptConfig():
     single_prompt_length=2
   ):
     self.single_prompt_length = single_prompt_length
+    
+    self.print_self()
+    
+  def print_self(self):
+    for key, value in self.__dict__.items():
+      print(key, ":", value)
