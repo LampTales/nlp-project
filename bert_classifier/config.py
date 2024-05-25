@@ -232,6 +232,8 @@ class LoraConfig():
       v_lora = True,
       interm_lora = True,
       pooler_lora = True,
+      lora_alpha = 1,
+      lora_scaling = -1,
   ):
     self.lora_rank = lora_rank
     self.lora_dropout = lora_dropout
@@ -241,6 +243,9 @@ class LoraConfig():
     self.v_lora = v_lora
     self.interm_lora = interm_lora
     self.pooler_lora = pooler_lora
+    
+    self.lora_alpha = lora_alpha
+    self.lora_scaling = lora_scaling
     
     self.print_self()
     
