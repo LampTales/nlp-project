@@ -1,21 +1,98 @@
-dev sentiment acc :: 0.317                                                                                                                                                                                                                                                   
-dev paraphrase acc :: 0.716                                                                                                                                                                                                                                                  
-dev sts corr :: 0.313  
+pretrain with epochs 10
+Task: Sentiment, Epoch 9: train loss :: 1.534, train acc :: 0.338, dev acc :: 0.322
+Task: Paraphrase, Epoch 9: train loss :: 0.547, train acc :: 0.731, dev acc :: 0.725
+Task: Similarity, Epoch 9: train loss :: 1.948, train corr :: 0.384, dev corr :: 0.307
 
-modify batch_size
-Task: Sentiment, Epoch 9: train loss :: 1.531, train acc :: 0.335, dev acc :: 0.324                                                                                                                                                                                          
-Task: Paraphrase, Epoch 9: train loss :: 0.525, train acc :: 0.747, dev acc :: 0.745                                                                                                                                                                                         
-Task: Similarity, Epoch 9: train loss :: 1.962, train corr :: 0.386, dev corr :: 0.307
-dev sentiment acc :: 0.324
-dev paraphrase acc :: 0.736
-dev sts corr :: 0.313  
+pretrain with epochs 25
+Task: Sentiment, Epoch 24: train loss :: 1.472, train acc :: 0.381, dev acc :: 0.367
+Task: Paraphrase, Epoch 24: train loss :: 0.482, train acc :: 0.773, dev acc :: 0.767
+Task: Similarity, Epoch 24: train loss :: 1.741, train corr :: 0.507, dev corr :: 0.365
 
-finetune with small batch
-Task: Sentiment, Epoch 9: train loss :: 0.310, train acc :: 0.944, dev acc :: 0.499                                                                                                              
-Task: Paraphrase, Epoch 9: train loss :: 0.455, train acc :: 0.801, dev acc :: 0.775                                                                                                             
-Task: Similarity, Epoch 9: train loss :: 0.212, train corr :: 0.973, dev corr :: 0.357  
-dev sentiment acc :: 0.499
-dev paraphrase acc :: 0.775
-dev sts corr :: 0.351
 
-finetune with small batch on AILab
+
+finetune with epochs 10
+Task: Sentiment, Epoch 9: train loss :: 0.341, train acc :: 0.916, dev acc :: 0.516
+Task: Paraphrase, Epoch 9: train loss :: 0.456, train acc :: 0.798, dev acc :: 0.775
+Task: Similarity, Epoch 9: train loss :: 0.255, train corr :: 0.969, dev corr :: 0.341
+
+finetune with epochs 25
+Task: Sentiment, Epoch 24: train loss :: 0.075, train acc :: 0.987, dev acc :: 0.505
+Task: Paraphrase, Epoch 24: train loss :: 0.311, train acc :: 0.900, dev acc :: 0.817
+Task: Similarity, Epoch 24: train loss :: 0.122, train corr :: 0.987, dev corr :: 0.383
+
+
+
+lora rank 8 with epochs 10
+
+
+lora rank 8 with epochs 25
+Task: Sentiment, Epoch 24: train loss :: 1.128, train acc :: 0.532, dev acc :: 0.473
+Task: Paraphrase, Epoch 24: train loss :: 0.514, train acc :: 0.752, dev acc :: 0.746
+Task: Similarity, Epoch 24: train loss :: 1.304, train corr :: 0.753, dev corr :: 0.369
+
+lora rank 8 with epochs 50
+Task: Sentiment, Epoch 49: train loss :: 1.006, train acc :: 0.604, dev acc :: 0.480
+Task: Paraphrase, Epoch 49: train loss :: 0.458, train acc :: 0.795, dev acc :: 0.780
+Task: Similarity, Epoch 49: train loss :: 0.657, train corr :: 0.921, dev corr :: 0.473
+
+
+
+lora rank 2 with all linear
+Task: Sentiment, Epoch 24: train loss :: 1.182, train acc :: 0.493, dev acc :: 0.454
+Task: Paraphrase, Epoch 24: train loss :: 0.511, train acc :: 0.754, dev acc :: 0.748
+Task: Similarity, Epoch 24: train loss :: 1.600, train corr :: 0.612, dev corr :: 0.387
+
+lora rank 4 with all linear
+Task: Sentiment, Epoch 24: train loss :: 1.150, train acc :: 0.513, dev acc :: 0.450
+Task: Paraphrase, Epoch 24: train loss :: 0.510, train acc :: 0.752, dev acc :: 0.745
+Task: Similarity, Epoch 24: train loss :: 1.523, train corr :: 0.646, dev corr :: 0.363
+
+lora rank 8 with all linear
+Task: Sentiment, Epoch 24: train loss :: 1.128, train acc :: 0.532, dev acc :: 0.473
+Task: Paraphrase, Epoch 24: train loss :: 0.514, train acc :: 0.752, dev acc :: 0.746
+Task: Similarity, Epoch 24: train loss :: 1.304, train corr :: 0.753, dev corr :: 0.369
+
+lora rank 16 with all linear
+Task: Sentiment, Epoch 24: train loss :: 1.051, train acc :: 0.576, dev acc :: 0.472
+Task: Paraphrase, Epoch 24: train loss :: 0.509, train acc :: 0.756, dev acc :: 0.749
+Task: Similarity, Epoch 24: train loss :: 1.064, train corr :: 0.821, dev corr :: 0.337
+
+lora rank 32 with all linear
+Task: Sentiment, Epoch 24: train loss :: 0.959, train acc :: 0.640, dev acc :: 0.478
+Task: Paraphrase, Epoch 24: train loss :: 0.496, train acc :: 0.766, dev acc :: 0.759
+Task: Similarity, Epoch 24: train loss :: 0.768, train corr :: 0.897, dev corr :: 0.344
+
+lora rank 64 with all linear
+Task: Sentiment, Epoch 24: train loss :: 0.835, train acc :: 0.722, dev acc :: 0.485
+Task: Paraphrase, Epoch 24: train loss :: 0.488, train acc :: 0.769, dev acc :: 0.759
+Task: Similarity, Epoch 24: train loss :: 0.570, train corr :: 0.934, dev corr :: 0.340
+
+
+
+prompt pre with length 2
+Task: Sentiment, Epoch 24: train loss :: 1.495, train acc :: 0.353, dev acc :: 0.338
+Task: Paraphrase, Epoch 24: train loss :: 0.496, train acc :: 0.763, dev acc :: 0.758
+Task: Similarity, Epoch 24: train loss :: 1.850, train corr :: 0.448, dev corr :: 0.342
+
+prompt pre with length 4
+Task: Sentiment, Epoch 24: train loss :: 1.487, train acc :: 0.373, dev acc :: 0.362
+Task: Paraphrase, Epoch 24: train loss :: 0.503, train acc :: 0.757, dev acc :: 0.752
+Task: Similarity, Epoch 24: train loss :: 1.864, train corr :: 0.431, dev corr :: 0.342
+
+prompt pre with length 8
+Task: Sentiment, Epoch 24: train loss :: 1.512, train acc :: 0.345, dev acc :: 0.323
+Task: Paraphrase, Epoch 24: train loss :: 0.507, train acc :: 0.756, dev acc :: 0.750
+Task: Similarity, Epoch 24: train loss :: 1.841, train corr :: 0.442, dev corr :: 0.347
+
+
+prompt fix with length 2
+Task: Sentiment, Epoch 24: train loss :: 1.177, train acc :: 0.505, dev acc :: 0.447
+Task: Paraphrase, Epoch 24: train loss :: 0.508, train acc :: 0.755, dev acc :: 0.750
+Task: Similarity, Epoch 24: train loss :: 1.443, train corr :: 0.689, dev corr :: 0.490
+
+prompt fix with length 4
+Task: Sentiment, Epoch 24: train loss :: 1.117, train acc :: 0.527, dev acc :: 0.474
+Task: Paraphrase, Epoch 24: train loss :: 0.496, train acc :: 0.762, dev acc :: 0.759
+Task: Similarity, Epoch 24: train loss :: 1.308, train corr :: 0.718, dev corr :: 0.476
+
+prompt fix with length 8
