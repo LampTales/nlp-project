@@ -23,7 +23,9 @@ Task: Similarity, Epoch 24: train loss :: 0.122, train corr :: 0.987, dev corr :
 
 
 lora rank 8 with epochs 10
-
+Task: Sentiment, Epoch 9: train loss :: 1.251, train acc :: 0.455, dev acc :: 0.423
+Task: Paraphrase, Epoch 9: train loss :: 0.567, train acc :: 0.712, dev acc :: 0.708
+Task: Similarity, Epoch 9: train loss :: 1.817, train corr :: 0.483, dev corr :: 0.328
 
 lora rank 8 with epochs 25
 Task: Sentiment, Epoch 24: train loss :: 1.128, train acc :: 0.532, dev acc :: 0.473
@@ -34,6 +36,11 @@ lora rank 8 with epochs 50
 Task: Sentiment, Epoch 49: train loss :: 1.006, train acc :: 0.604, dev acc :: 0.480
 Task: Paraphrase, Epoch 49: train loss :: 0.458, train acc :: 0.795, dev acc :: 0.780
 Task: Similarity, Epoch 49: train loss :: 0.657, train corr :: 0.921, dev corr :: 0.473
+
+lora rank 8 with epochs 75
+Task: Sentiment, Epoch 74: train loss :: 0.863, train acc :: 0.689, dev acc :: 0.473
+Task: Paraphrase, Epoch 74: train loss :: 0.425, train acc :: 0.815, dev acc :: 0.790
+Task: Similarity, Epoch 74: train loss :: 0.404, train corr :: 0.963, dev corr :: 0.488
 
 
 
