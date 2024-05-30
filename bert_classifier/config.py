@@ -258,9 +258,13 @@ class LoraConfig():
 class PromptConfig():
   def __init__(
     self,
-    single_prompt_length=2
+    single_prompt_length=2,
+    stack_prompt=False,
+    batch_size=-1,
   ):
     self.single_prompt_length = single_prompt_length
+    self.stack_prompt = stack_prompt
+    self.batch_size = batch_size
     
     self.print_self()
     

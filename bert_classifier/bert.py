@@ -200,10 +200,21 @@ class BertLayer(nn.Module):
     self.prompt_config = prompt_config
     self.single_prompt_length = prompt_config.single_prompt_length
     self.previous_prompt_length = previous_prompt_length
+    self.stack_prompt = prompt_config.stack_prompt
     
-    self.prompt_tensor = nn.Parameter(torch.randn(1, self.single_prompt_length, self.config.hidden_size))
-    # prompt tuning
-    self.prompt_tensor.requires_grad = True
+    if self.stack_prompt:
+      self.prompt_tensor = nn.Parameter(torch.randn(self.prompt_config.batch_size, self.single_prompt_length, self.config.hidden_size))
+      self.prompt_tensor.requires_grad = True
+    else:
+      self.prompt_tensor = nn.Parameter(torch.randn(1, self.single_prompt_length, self.config.hidden_size))
+      self.smooth_MLP = nn.Sequential(
+        nn.Linear(self.prompt_tensor.size(-1), self.prompt_tensor.size(-1)),
+        nn.ReLU(),
+        nn.Linear(self.prompt_tensor.size(-1), self.prompt_tensor.size(-1))
+      )
+      self.smooth_MLP.requires_grad = True
+      self.prompt_tensor.requires_grad = False
+    
     
     return self.single_prompt_length
 
@@ -245,12 +256,19 @@ class BertLayer(nn.Module):
       # print(f'hidden_states.shape: {hidden_states.shape}')
       # print(f'attention_mask.shape: {attention_mask.shape}')
       # print(f'prompt_tensor.shape: {self.prompt_tensor.shape}')
+      # print(attention_mask)
       # example of sizes:
       # hidden_states.shape: torch.Size([8, 41, 768]) [batch_size, seq_len, hidden_size]
       # attention_mask.shape: torch.Size([8, 1, 1, 41]) [batch_size, 1, 1, seq_len]
       # prompt_tensor.shape: torch.Size([1, 2, 768]) [1, single_prompt_length, hidden_size]
       hidden_states = hidden_states[:, self.previous_prompt_length:]
-      hidden_states = torch.cat([self.prompt_tensor.repeat(hidden_states.size(0), 1, 1), hidden_states], dim=1)
+      # TODO: check the repeat
+      if self.stack_prompt:
+        hidden_states = torch.cat([self.prompt_tensor, hidden_states], dim=1)
+      else:
+        smooth_prompt = self.smooth_MLP(self.prompt_tensor)
+        # hidden_states = torch.cat([self.prompt_tensor.repeat(hidden_states.size(0), 1, 1), hidden_states], dim=1)
+        hidden_states = torch.cat([smooth_prompt.repeat(hidden_states.size(0), 1, 1), hidden_states], dim=1)
       attention_mask = torch.cat([torch.ones(attention_mask.size(0), 1, 1, self.single_prompt_length, device=attention_mask.device), attention_mask], dim=-1)
       # print(f'attention_mask.shape: {attention_mask.shape}')
     x = self.self_attention(hidden_states, attention_mask)

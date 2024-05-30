@@ -42,6 +42,7 @@ PARAPHRASE_EMB = 768
 
 SIMILARITY_EMB = 768
 
+outer_args = None
 
 class MultitaskBERT(nn.Module):
     '''
@@ -65,13 +66,16 @@ class MultitaskBERT(nn.Module):
             self.frozen_bert()
             self.lora_config = LoraConfig(
                 lora_rank=8,
-                lora_dropout=0.1
+                lora_dropout=0.1,
+                lora_scaling=0.5
             )
             self.bert.lora_init(lora_config=self.lora_config)
         elif config.option == 'prompt':
             self.frozen_bert()
             self.prompt_config = PromptConfig(
-                single_prompt_length=2
+                single_prompt_length=4,
+                # stack_prompt=True,
+                # batch_size=args.batch_size
             )
             self.bert.prompt_init(prompt_config=self.prompt_config)
             
@@ -427,5 +431,6 @@ if __name__ == "__main__":
     args.filepath = f'trained/{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility
     print(f'{args.option} :: batch_size: {args.batch_size}, para_mul: {PARAPHRASE_BATCCH_MUL}')
+    outer_args = args
     train_multitask(args)
     test_model(args)
