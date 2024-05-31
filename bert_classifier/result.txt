@@ -54,8 +54,14 @@ Task: Paraphrase, Epoch 24: train loss :: 0.311, train acc :: 0.900, dev acc :: 
 Task: Similarity, Epoch 24: train loss :: 0.122, train corr :: 0.987, dev corr :: 0.383
 
 finetune with epochs 50
+Task: Sentiment, Epoch 49: train loss :: 0.030, train acc :: 0.994, dev acc :: 0.500
+Task: Paraphrase, Epoch 49: train loss :: 0.097, train acc :: 0.990, dev acc :: 0.829
+Task: Similarity, Epoch 49: train loss :: 0.062, train corr :: 0.993, dev corr :: 0.386
 
 finetune with epochs 75
+Task: Sentiment, Epoch 74: train loss :: 0.010, train acc :: 0.997, dev acc :: 0.501
+Task: Paraphrase, Epoch 74: train loss :: 0.036, train acc :: 0.999, dev acc :: 0.830
+Task: Similarity, Epoch 74: train loss :: 0.047, train corr :: 0.994, dev corr :: 0.403
 
 
 lora rank 8 with epochs 10
@@ -80,13 +86,24 @@ Task: Similarity, Epoch 74: train loss :: 0.404, train corr :: 0.963, dev corr :
 
 
 prompt length 4 with epoch 10
+Task: Sentiment, Epoch 9: train loss :: 1.202, train acc :: 0.485, dev acc :: 0.469
+Task: Paraphrase, Epoch 9: train loss :: 0.556, train acc :: 0.718, dev acc :: 0.720
+Task: Similarity, Epoch 9: train loss :: 1.836, train corr :: 0.473, dev corr :: 0.371
 
 prompt length 4 with epoch 25
+Task: Sentiment, Epoch 24: train loss :: 1.120, train acc :: 0.522, dev acc :: 0.451
+Task: Paraphrase, Epoch 24: train loss :: 0.497, train acc :: 0.763, dev acc :: 0.757
+Task: Similarity, Epoch 24: train loss :: 1.368, train corr :: 0.705, dev corr :: 0.504
 
 prompt length 4 with epoch 50
+Task: Sentiment, Epoch 49: train loss :: 1.068, train acc :: 0.563, dev acc :: 0.480
+Task: Paraphrase, Epoch 49: train loss :: 0.449, train acc :: 0.796, dev acc :: 0.782
+Task: Similarity, Epoch 49: train loss :: 0.912, train corr :: 0.858, dev corr :: 0.526
 
 prompt length 4 with epoch 75
-
+Task: Sentiment, Epoch 74: train loss :: 1.018, train acc :: 0.594, dev acc :: 0.500
+Task: Paraphrase, Epoch 74: train loss :: 0.418, train acc :: 0.822, dev acc :: 0.793
+Task: Similarity, Epoch 74: train loss :: 0.652, train corr :: 0.912, dev corr :: 0.551
 
 
 ## LORA rank
